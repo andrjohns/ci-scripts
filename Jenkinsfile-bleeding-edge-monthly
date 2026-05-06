@@ -102,12 +102,6 @@ pipeline {
 
         stage('Pull latest docker image') {
             parallel {
-                stage('Pull on mesa') {
-                    agent { label 'linux && v100 && mesa' }
-                    steps {
-                        sh "docker pull stanorg/ci:bleeding-edge-compilers"
-                    }
-                }
                 stage('Pull on triqs') {
                     agent { label 'linux && v100 && triqs' }
                     steps {
