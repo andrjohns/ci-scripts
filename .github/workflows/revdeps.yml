@@ -156,15 +156,12 @@ jobs:
           if ("cmdstanr" %in% rec_deps) {
             install.packages("cmdstanr", repos = c("https://stan-dev.r-universe.dev", getOption("repos")))
           }
-          if ("survHEhmc" %in% rec_deps) {
-            install.packages("survHEhmc", repos = c("https://giabaio.r-universe.dev/bin/linux/noble-x86_64/4.6/", getOption("repos")))
-          }
 
           # Remaining packages will be bioconductor or other non-CRAN packages, install manually
           rec_deps <- rec_deps[!(rec_deps %in% installed.packages()[,"Package"])]
 
           # Ignore archived packages which are still listed as 'Suggests'
-          rec_deps <- rec_deps[!(rec_deps %in% c("BRugs", "qs", "rkeops", "mcmcplots", "pryr", "glmmADMB"))]
+          rec_deps <- rec_deps[!(rec_deps %in% c("BRugs", "qs", "rkeops", "mcmcplots", "pryr", "glmmADMB", "survHEhmc"))]
 
           if (length(rec_deps) > 0) {
             # Update install locations for Github sources
