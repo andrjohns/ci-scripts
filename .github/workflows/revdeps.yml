@@ -156,12 +156,15 @@ jobs:
           if ("cmdstanr" %in% rec_deps) {
             install.packages("cmdstanr", repos = c("https://stan-dev.r-universe.dev", getOption("repos")))
           }
+          if ("survHEhmc" %in% rec_deps) {
+            install.packages("survHEhmc", repos = c("https://giabaio.r-universe.dev/bin/linux/noble-x86_64/4.6/", getOption("repos")))
+          }
 
           # Remaining packages will be bioconductor or other non-CRAN packages, install manually
           rec_deps <- rec_deps[!(rec_deps %in% installed.packages()[,"Package"])]
 
           # Ignore archived packages which are still listed as 'Suggests'
-          rec_deps <- rec_deps[!(rec_deps %in% c("BRugs", "qs", "rkeops", "mcmcplots"))]
+          rec_deps <- rec_deps[!(rec_deps %in% c("BRugs", "qs", "rkeops", "mcmcplots", "pryr", "glmmADMB"))]
 
           if (length(rec_deps) > 0) {
             # Update install locations for Github sources
@@ -169,6 +172,9 @@ jobs:
             rec_deps[rec_deps == "eggCountsExtra"] <- "github::CraigWangStat/eggCountsExtra"
             rec_deps[rec_deps == "INLA"] <- "local::/tmp/INLA_25.10.19.tar.gz"
             rec_deps[rec_deps == "iwmm"] <- "github::topipa/iwmm"
+            rec_deps[rec_deps == "bridgestan"] <- "github::roualdes/bridgestan/R"
+            rec_deps[rec_deps == "infinitefactor"] <- "github::poworoznek/infinitefactor"
+            rec_deps[rec_deps == "survHEinla"] <- "github::giabaio/survHEinla"
 
             pak::pak(rec_deps)
           }
