@@ -1,7 +1,6 @@
 ---
 
 name: Reverse Dependencies
-run-name: Reverse Dependencies (${{ inputs.package }}@${{ inputs.package == 'rstan' && inputs.rstan-source || (inputs.package == 'StanHeaders' && inputs.stanheaders-source || (inputs.package == 'rstantools' && inputs.rstantools-source || (inputs.package == 'loo' && inputs.loo-source || (inputs.package == 'posterior' && inputs.posterior-source || (inputs.package == 'bayesplot' && inputs.bayesplot-source || ''))))) }})
 on:
   workflow_call:
     inputs:
@@ -13,7 +12,7 @@ on:
       batch-size:
         description: 'Number of packages to check in each batch (default is 15)'
         required: false
-        default: 15
+        default: 20
         type: number
       rstan-source:
         description: 'rstan source (either a git ref or "CRAN", default is CRAN)'
@@ -57,21 +56,21 @@ jobs:
     name: Build & Cache Package Dependencies
     outputs:
       deps_matrix: ${{ steps.dep-batches.outputs.deps_matrix }}
+      cache_key: ${{ steps.calc-hash.outputs.cache_key }}
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
       - name: Clone rstan
-        if: inputs.rstan-source != 'CRAN' && inputs.rstan-source != 'cran'
+        if: inputs.rstan-source != 'CRAN'
         uses: actions/checkout@v6
         with:
-          submodules: recursive
           repository: stan-dev/rstan
           ref: ${{ inputs.rstan-source }}
           path: rstan-source
 
       - name: Clone StanHeaders
-        if: inputs.stanheaders-source != 'CRAN' && inputs.stanheaders-source != 'cran'
+        if: inputs.stanheaders-source != 'CRAN'
         uses: actions/checkout@v6
         with:
           submodules: recursive
@@ -80,37 +79,33 @@ jobs:
           path: StanHeaders-source
 
       - name: Clone rstantools
-        if: inputs.rstantools-source != 'CRAN' && inputs.rstantools-source != 'cran'
+        if: inputs.rstantools-source != 'CRAN'
         uses: actions/checkout@v6
         with:
-          submodules: recursive
           repository: stan-dev/rstantools
           ref: ${{ inputs.rstantools-source }}
           path: rstantools-source
 
       - name: Clone loo
-        if: inputs.loo-source != 'CRAN' && inputs.loo-source != 'cran'
+        if: inputs.loo-source != 'CRAN'
         uses: actions/checkout@v6
         with:
-          submodules: recursive
           repository: stan-dev/loo
           ref: ${{ inputs.loo-source }}
           path: loo-source
 
       - name: Clone posterior
-        if: inputs.posterior-source != 'CRAN' && inputs.posterior-source != 'cran'
+        if: inputs.posterior-source != 'CRAN'
         uses: actions/checkout@v6
         with:
-          submodules: recursive
           repository: stan-dev/posterior
           ref: ${{ inputs.posterior-source }}
           path: posterior-source
 
       - name: Clone bayesplot
-        if: inputs.bayesplot-source != 'CRAN' && inputs.bayesplot-source != 'cran'
+        if: inputs.bayesplot-source != 'CRAN'
         uses: actions/checkout@v6
         with:
-          submodules: recursive
           repository: stan-dev/bayesplot
           ref: ${{ inputs.bayesplot-source }}
           path: bayesplot-source
@@ -145,45 +140,61 @@ jobs:
           dir.create("/tmp/PakLibrary")
           .libPaths(c("/tmp/PakLibrary", .libPaths()))
 
-          system("sudo apt-get install -y libcurl4-openssl-dev")
-          install.packages(c("pak", "rstantools"))
+          system("sudo apt-get install -y libcurl4-openssl-dev libglpk-dev")
 
           # Lookup and (attempt to) install all dependencies for reverse-dependencies
           pkg_deps <- tools::package_dependencies(pkg, reverse = TRUE)[[pkg]]
           rec_deps <- unique(do.call(c, tools::package_dependencies(pkg_deps, which = 'all')))
-          install.packages(rec_deps)
+
+          # Undeclared dependency for vignettes
+          if ("shinymrp" %in% pkg_deps) {
+            rec_deps <- c(rec_deps, "cmdstanr")
+          }
+
+          install.packages(c(rec_deps, "pak"))
+
+          if ("cmdstanr" %in% rec_deps) {
+            install.packages("cmdstanr", repos = c("https://stan-dev.r-universe.dev", getOption("repos")))
+          }
 
           # Remaining packages will be bioconductor or other non-CRAN packages, install manually
           rec_deps <- rec_deps[!(rec_deps %in% installed.packages()[,"Package"])]
-          rec_deps <- rec_deps[!(rec_deps %in% c("blavsam", "eggCountsExtra", "BRugs", "cmdstanr", "INLA", "iwmm", "qs", "rkeops", "mcmcplots"))]
 
-          install.packages('cmdstanr', repos = c('https://stan-dev.r-universe.dev', getOption("repos")))
-          pak::pak(c(
-            paste0("any::", rec_deps),
-            "github::ecmerkle/blavsam",
-            "github::CraigWangStat/eggCountsExtra",
-            "local::/tmp/INLA_25.10.19.tar.gz",
-            "any::qgraph",
-            "topipa/iwmm"
-          ))
+          # Ignore archived packages which are still listed as 'Suggests'
+          rec_deps <- rec_deps[!(rec_deps %in% c("BRugs", "qs", "rkeops", "mcmcplots"))]
 
-          install_dev <- function(pkg, pkg_src) {
+          if (length(rec_deps) > 0) {
+            # Update install locations for Github sources
+            rec_deps[rec_deps == "blavsam"] <- "github::ecmerkle/blavsam"
+            rec_deps[rec_deps == "eggCountsExtra"] <- "github::CraigWangStat/eggCountsExtra"
+            rec_deps[rec_deps == "INLA"] <- "local::/tmp/INLA_25.10.19.tar.gz"
+            rec_deps[rec_deps == "iwmm"] <- "github::topipa/iwmm"
+
+            pak::pak(rec_deps)
+          }
+
+          install_stan_pkg <- function(pkg, pkg_src) {
             if (tolower(pkg_src) == "cran") {
               install.packages(pkg)
             } else {
-              pkg <- ifelse(pkg == "rstan", "rstan/rstan/rstan",
-                             ifelse(pkg == "StanHeaders", "rstan/StanHeaders", pkg))
-              pak::pak(paste0("local::./", pkg, "-source"))
+              if (pkg == "rstan") {
+                pkg <- "rstan-source/rstan/rstan"
+              } else if (pkg == "StanHeaders") {
+                pkg <- "StanHeaders-source/StanHeaders"
+              } else {
+                pkg <- paste0(pkg, "-source")
+              }
+              pak::pak(paste0("local::./", pkg))
             }
           }
 
           # Install dev versions last so that they're not used for any dependencies
-          install_dev("StanHeaders", "${{ inputs.stanheaders-source }}")
-          install_dev("rstan", "${{ inputs.rstan-source }}")
-          install_dev("rstantools", "${{ inputs.rstantools-source }}")
-          install_dev("loo", "${{ inputs.loo-source }}")
-          install_dev("posterior", "${{ inputs.posterior-source }}")
-          install_dev("bayesplot", "${{ inputs.bayesplot-source }}")
+          install_stan_pkg("StanHeaders", "${{ inputs.stanheaders-source }}")
+          install_stan_pkg("rstan", "${{ inputs.rstan-source }}")
+          install_stan_pkg("rstantools", "${{ inputs.rstantools-source }}")
+          install_stan_pkg("loo", "${{ inputs.loo-source }}")
+          install_stan_pkg("posterior", "${{ inputs.posterior-source }}")
+          install_stan_pkg("bayesplot", "${{ inputs.bayesplot-source }}")
 
           # Split dependencies into requested batch size and
           # restructure into format for actions 'matrix' argument
@@ -196,11 +207,19 @@ jobs:
               file=Sys.getenv("GITHUB_OUTPUT"), append = TRUE)
         shell: Rscript {0}
 
+      - name: Generate unique hash key
+        id: calc-hash
+        run: |
+          # Ensure that the key is unique for each combination of inputs within each workflow run
+          # in case of multiple job runs within the same workflow
+          echo '${{ toJSON(inputs) }}' > /tmp/inputs.json
+          echo "cache_key=$(sha256sum /tmp/inputs.json | awk '{print "${{ github.run_id }}-" $1}')" >> "$GITHUB_OUTPUT"
+
       - name: Cache built packages
         uses: actions/cache/save@v6
         with:
           path: /tmp/PakLibrary/
-          key: ${{ github.run_id }}
+          key: ${{ steps.calc-hash.outputs.cache_key }}
 
   reverse-dependencies:
     needs: prepare-library
@@ -208,7 +227,7 @@ jobs:
     name: Check Reverse Dependencies (Batch ${{ matrix.group }})
     strategy:
       fail-fast: false
-      max-parallel: 10
+      max-parallel: 5
       matrix: ${{ fromJson(needs.prepare-library.outputs.deps_matrix) }}
     env:
       R_REMOTES_NO_ERRORS_FROM_WARNINGS: true
@@ -227,7 +246,7 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: /tmp/PakLibrary/
-          key: ${{ github.run_id }}
+          key: ${{ needs.prepare-library.outputs.cache_key }}
 
       - uses: r-lib/actions/setup-r@v2
         with:
@@ -250,7 +269,13 @@ jobs:
           sudo apt-get install -y pandoc libudunits2-dev libglpk-dev libgsl0-dev \
                texlive-latex-base texlive-latex-recommended texlive-fonts-extra \
                texlive-fonts-recommended texlive-luatex texlive-latex-extra \
-               texlive-bibtex-extra libproj-dev
+               texlive-bibtex-extra libproj-dev libglu1-mesa-dev libgdal-dev
+
+      - name: Print Session Info
+        env:
+          R_LIBS_USER: /tmp/PakLibrary
+        run: installed.packages()[,c("Package", "Version")]
+        shell: Rscript {0}
 
       - name: Run reverse-dependency checks
         env:
@@ -263,30 +288,38 @@ jobs:
           _R_CHECK_SYSTEM_CLOCK_: 0
         run: |
           curr_deps <- jsonlite::fromJSON('${{ matrix.deps }}')
+          rec_deps <- unique(do.call(c, tools::package_dependencies(curr_deps, which = 'all')))
+          if ("shinymrp" %in% curr_deps) {
+            rec_deps <- c(rec_deps, "cmdstanr")
+          }
 
           # Install any system dependencies needed for packages
-          rec_deps <- unique(do.call(c, tools::package_dependencies(curr_deps, which = 'all')))
           pak::sysreqs_fix_installed(c(curr_deps, rec_deps))
-          cmdstanr::install_cmdstan(cores = parallel::detectCores())
+
+          if ("cmdstanr" %in% c(curr_deps, rec_deps)) {
+            cmdstanr::install_cmdstan(cores = parallel::detectCores())
+          }
 
           dir.create("testdir")
           download.packages(curr_deps, "testdir", repos = "https://cran.rstudio.com")
           Sys.unsetenv("NOT_CRAN")
-          tools::check_packages_in_dir("testdir", check_args = "--as-cran --no-manual", Ncpus = parallel::detectCores() - 1)
+          Ncpus <- ifelse(any(c("ctsem", "blavaan", "rstanarm") %in% curr_deps), 2, 3)
+          tools::check_packages_in_dir("testdir", check_args = "--as-cran --no-manual", Ncpus = Ncpus)
         shell: Rscript {0}
 
       - uses: actions/upload-artifact@v7
+        id: upload-batch-results
         with:
-          name: checkresults-${{ matrix.group }}
+          name: ${{ inputs.package }}-checkresults-${{ needs.prepare-library.outputs.cache_key }}-${{ matrix.group }}
           path: |
             testdir/**/00check.log
             testdir/**/00install.out
+            testdir/**/*.Rout
           compression-level: 9
-          retention-days: 1
-
+          
   summarise-results:
     name: Summarise Results
-    needs: reverse-dependencies
+    needs: [prepare-library, reverse-dependencies]
     runs-on: ubuntu-latest
 
     steps:
@@ -294,7 +327,7 @@ jobs:
         uses: actions/download-artifact@v7
         with:
           path: checkresults
-          pattern: checkresults-*
+          pattern: ${{ inputs.package }}-checkresults-${{ needs.prepare-library.outputs.cache_key }}-*
           merge-multiple: true
 
       - uses: r-lib/actions/setup-r@v2
@@ -303,15 +336,18 @@ jobs:
 
       - name: Generate results summary output
         run: |
+          install.packages(c("knitr", "gh"))
+
           setwd("checkresults")
-          install.packages("knitr")
-          res <- tools::check_packages_in_dir_details(".")
           all_pkgs <- gsub("^\\./(.*)\\.Rcheck", "\\1", list.dirs(".", recursive = FALSE))
+          res <- tools::check_packages_in_dir_details(".")
+
           install_failures <- unique(res$Package[res$Check == "whether package can be installed"])
           install_failures <- install_failures[order(install_failures)]
           check_statuses <- c("tests", "re-building of vignette outputs", "examples", "examples with --run-donttest")
           check_failures <- unique(res$Package[res$Check %in% check_statuses])
           check_failures <- check_failures[order(check_failures)]
+
           summary_tbl <- knitr::kable(
             data.frame(
               "OK" = length(setdiff(all_pkgs, c(install_failures, check_failures))),
@@ -320,43 +356,50 @@ jobs:
               check.names = FALSE
             )
           )
-          install_logs <- sapply(install_failures, \(pkg) {
-            paste0(c(
-              paste("###", pkg),
-              "<details>",
-              "<summary>Install Log</summary>",
-              "",
-              "```",
-              paste0(readLines(paste0(pkg, ".Rcheck/00install.out")), collapse = "\n"),
-              "```",
-              "",
-              "</details>\n"),
-              collapse = "\n"
-            )
-          }) |>
-            paste0(collapse = "\n")
-          check_logs <- sapply(check_failures, \(pkg) {
-            paste0(c(
-              "",
-              paste("###", pkg),
-              "",
-              "<details>",
-              "<summary>Check Log</summary>",
-              "",
-              "```",
-              paste0(readLines(paste0(pkg, ".Rcheck/00check.log")), collapse = "\n"),
-              "```",
-              "",
-              "</details>\n"),
-              collapse = "\n"
-            )
-          }) |>
-            paste0(collapse = "\n")
+
+          install_logs <- paste0(
+            sapply(install_failures, \(pkg) {
+              paste0(c(
+                paste("###", pkg),
+                "<details>",
+                "<summary>Install Log</summary>",
+                "",
+                "```",
+                paste0(readLines(paste0(pkg, ".Rcheck/00install.out")), collapse = "\n"),
+                "```",
+                "",
+                "</details>\n"),
+                collapse = "\n"
+              )
+            }),
+            collapse = "\n"
+          )
+
+          check_logs <- paste0(
+            sapply(check_failures, \(pkg) {
+              paste0(c(
+                "",
+                paste("###", pkg),
+                "",
+                "<details>",
+                "<summary>Check Log</summary>",
+                "",
+                "```",
+                paste0(readLines(paste0(pkg, ".Rcheck/00check.log")), collapse = "\n"),
+                "```",
+                "",
+                "</details>\n"),
+                collapse = "\n"
+              )
+            }),
+            collapse = "\n"
+          )
+
           result_md <- paste0(c(
-            "# Reverse-Dependency Status\n",
+            "# Reverse-Dependency Status (${{ inputs.package }})\n",
             "## Summary\n",
             summary_tbl,
-            "## Install Failure\n",
+            "## Install Failures\n",
             install_logs,
             "## Vignette/Test Failures\n",
             check_logs),
@@ -368,6 +411,6 @@ jobs:
       - name: Upload combined results
         uses: actions/upload-artifact@v7
         with:
-          name: all-logs
+          name: ${{ inputs.package }}-all-logs-${{ needs.prepare-library.outputs.cache_key }}
           path: checkresults
           compression-level: 9
