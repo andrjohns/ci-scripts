@@ -344,13 +344,13 @@ jobs:
 
       - name: Generate results summary output
         run: |
-          install.packages(c("knitr", "gh"))
+          install.packages("knitr")
 
           setwd("checkresults")
           all_pkgs <- gsub("^\\./(.*)\\.Rcheck", "\\1", list.dirs(".", recursive = FALSE))
           res <- tools::check_packages_in_dir_details(".")
 
-          install_failures <- unique(res$Package[res$Check == "whether package can be installed"])
+          install_failures <- unique(res$Package[res$Check == "whether package can be installed" & res$Status == "ERROR"])
           install_failures <- install_failures[order(install_failures)]
           check_statuses <- c("tests", "re-building of vignette outputs", "examples", "examples with --run-donttest")
           check_failures <- unique(res$Package[res$Check %in% check_statuses])
