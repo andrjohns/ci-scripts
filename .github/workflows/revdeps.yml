@@ -126,6 +126,12 @@ jobs:
         with:
           r-version: 'release'
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get install -y pandoc libudunits2-dev libglpk-dev libgsl0-dev \
+               libproj-dev libglu1-mesa-dev libgdal-dev  libgl1-mesa-dev libmecab-dev \
+               libcurl4-openssl-dev
+
       - name: Download recursive dependencies, batch dependencies to check
         id: dep-batches
         run: |
@@ -139,8 +145,6 @@ jobs:
           # Initialise a standalone library
           dir.create("/tmp/PakLibrary")
           .libPaths(c("/tmp/PakLibrary", .libPaths()))
-
-          system("sudo apt-get install -y libcurl4-openssl-dev libglpk-dev")
 
           # Lookup and (attempt to) install all dependencies for reverse-dependencies
           pkg_deps <- tools::package_dependencies(pkg, reverse = TRUE, which = "all")[[pkg]]
@@ -272,7 +276,8 @@ jobs:
           sudo apt-get install -y pandoc libudunits2-dev libglpk-dev libgsl0-dev \
                texlive-latex-base texlive-latex-recommended texlive-fonts-extra \
                texlive-fonts-recommended texlive-luatex texlive-latex-extra \
-               texlive-bibtex-extra libproj-dev libglu1-mesa-dev libgdal-dev
+               texlive-bibtex-extra libproj-dev libglu1-mesa-dev libgdal-dev \
+               libgl1-mesa-dev libmecab-dev
 
       - name: Print Session Info
         env:
