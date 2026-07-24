@@ -279,6 +279,9 @@ jobs:
                texlive-bibtex-extra libproj-dev libglu1-mesa-dev libgdal-dev \
                libgl1-mesa-dev libmecab-dev
 
+      - name: Free up space on runner
+        run:  rm -Rf /usr/share/dotnet /opt/ghc "/usr/local/share/boost" "$AGENT_TOOLSDIRECTORY" || true
+
       - name: Print Session Info
         env:
           R_LIBS_USER: /tmp/PakLibrary
