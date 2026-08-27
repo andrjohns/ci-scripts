@@ -176,6 +176,7 @@ jobs:
             rec_deps[rec_deps == "bridgestan"] <- "github::roualdes/bridgestan/R"
             rec_deps[rec_deps == "infinitefactor"] <- "github::poworoznek/infinitefactor"
             rec_deps[rec_deps == "survHEinla"] <- "github::giabaio/survHEinla"
+            rec_deps[rec_deps == "SBC"] <- "github::hyunjimoon/SBC"
 
             pak::pak(rec_deps)
           }
@@ -327,7 +328,7 @@ jobs:
             testdir/**/00install.out
             testdir/**/*.Rout
           compression-level: 9
-          
+
   summarise-results:
     name: Summarise Results
     needs: [prepare-library, reverse-dependencies]
