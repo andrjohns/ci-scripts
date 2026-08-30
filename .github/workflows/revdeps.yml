@@ -10,7 +10,7 @@ on:
         default: 'rstan'
         type: string
       batch-size:
-        description: 'Number of packages to check in each batch (default is 15)'
+        description: 'Number of packages to check in each batch (default is 20)'
         required: false
         default: 20
         type: number
