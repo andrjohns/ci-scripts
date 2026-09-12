@@ -309,7 +309,7 @@ jobs:
             rec_deps <- c(rec_deps, "cmdstanr")
           }
           # Undeclared dependency for tests
-          if ("runMCMCbtadjust" %in% pkg_deps) {
+          if ("runMCMCbtadjust" %in% curr_deps) {
             rec_deps <- c(rec_deps, "rbibutils")
           }
 
