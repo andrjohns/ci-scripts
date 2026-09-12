@@ -154,6 +154,10 @@ jobs:
           if ("shinymrp" %in% pkg_deps) {
             rec_deps <- c(rec_deps, "cmdstanr")
           }
+          # Undeclared dependency for tests
+          if ("runMCMCbtadjust" %in% pkg_deps) {
+            rec_deps <- c(rec_deps, "rbibutils")
+          }
 
           install.packages(c(rec_deps, "pak"))
 
@@ -303,6 +307,10 @@ jobs:
           rec_deps <- unique(do.call(c, tools::package_dependencies(curr_deps, which = 'all')))
           if ("shinymrp" %in% curr_deps) {
             rec_deps <- c(rec_deps, "cmdstanr")
+          }
+          # Undeclared dependency for tests
+          if ("runMCMCbtadjust" %in% pkg_deps) {
+            rec_deps <- c(rec_deps, "rbibutils")
           }
 
           # Install any system dependencies needed for packages
